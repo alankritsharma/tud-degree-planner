@@ -69,6 +69,7 @@ export type RequirementSubcategory = {
 export type Module = {
   id: string;
   title: string;
+  moduleCode?: string;
   credits: number;
   categoryGroupId: string;
   categoryId: string;
@@ -220,4 +221,29 @@ export type OptimizationResult = {
   decisionsByModuleId: Record<string, OptimizationDecision>;
   requirementStatsById: Record<string, RequirementOptimizationStats>;
   warnings: OptimizationWarning[];
+};
+
+export type StudentModuleRecord = {
+  id: string;
+  title: string;
+  moduleCode: string;
+  credits?: number;
+  assignedBasketId: string;
+  eligibleBasketIds?: string[];
+  gradingType: GradingType;
+  status: ModuleStatus;
+  grade?: GermanGrade | null;
+  semesterId?: string;
+  typeLabel?: ModuleTypeLabel;
+};
+
+export type StudentAcademicRecord = {
+  studentName: string;
+  programLabel: string;
+  specializationLabel: string;
+  completedCredits: number;
+  totalCredits: number;
+  currentGpa: number;
+  passedModules: StudentModuleRecord[];
+  openModules: StudentModuleRecord[];
 };

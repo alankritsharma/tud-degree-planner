@@ -164,7 +164,7 @@ export default function DashboardPage() {
           <KpiCard
             label="Remaining CP"
             value={`${metrics.remainingCredits}`}
-            hint="Still needed to reach the 120 CP programme total"
+            hint={`${metrics.nonThesisRemainingCredits} + ${metrics.thesisRemainingCredits} (Master Thesis) CP still needed`}
           />
           <KpiCard
             label="Extra CP"

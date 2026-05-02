@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { programRules, recommendedPlan } from "@/config/programRules";
 import {
-  legacySampleModuleIds,
   seedActualPlanSemesters,
   seedModules,
   seedUserModuleStates,
@@ -27,7 +26,7 @@ const MODULES_STORAGE_KEY = "mastermap:modules";
 const STATES_STORAGE_KEY = "mastermap:user-module-states";
 const SEMESTERS_STORAGE_KEY = "mastermap:actual-plan-semesters";
 const DATA_VERSION_KEY = "mastermap:data-version";
-const DATA_VERSION = "2026-04-27-strict-optimizer-v1";
+const DATA_VERSION = "2026-05-02-phase-1-tucan-record-v1";
 
 const normalizeSemesterId = (semesterId: string): string => {
   if (semesterId.startsWith("semester-")) {
@@ -176,14 +175,23 @@ export const useModuleProgress = () => {
     const storedModules = parseStoredArray<LegacyModule>(MODULES_STORAGE_KEY).map(normalizeModule);
     const storedStates = parseStoredArray<UserModuleState>(STATES_STORAGE_KEY).map(normalizeState);
     const storedSemesters = parseStoredArray<Semester>(SEMESTERS_STORAGE_KEY);
-    const shouldDropLegacySamples =
-      storedVersion !== DATA_VERSION && storedModules.some((module) => legacySampleModuleIds.has(module.id));
-    const nextModules = shouldDropLegacySamples
-      ? storedModules.filter((module) => !legacySampleModuleIds.has(module.id))
-      : storedModules;
+
+    const useFreshSeedData = storedVersion !== DATA_VERSION;
+
+    const nextModules = useFreshSeedData
+      ? seedModules
+      : storedModules.length > 0
+        ? storedModules
+        : seedModules;
     const nextModuleIds = new Set(nextModules.map((module) => module.id));
-    const nextStates = storedStates.filter((state) => nextModuleIds.has(state.moduleId));
-    const nextSemesters = mergeSemestersWithDefaults(storedSemesters);
+    const nextStates = useFreshSeedData
+      ? seedUserModuleStates
+      : (storedStates.length > 0 ? storedStates : seedUserModuleStates).filter((state) =>
+          nextModuleIds.has(state.moduleId),
+        );
+    const nextSemesters = mergeSemestersWithDefaults(
+      storedSemesters.length > 0 ? storedSemesters : seedActualPlanSemesters,
+    );
 
     window.localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
     window.localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(nextModules));
@@ -386,6 +394,7 @@ export const useModuleProgress = () => {
     const nextModule: Module = {
       id: moduleId,
       title,
+      moduleCode: "",
       credits,
       ...placement,
       assignedBasketId,
@@ -512,6 +521,8 @@ export const useModuleProgress = () => {
   const missingMinimumRequirements = visibleCreditRequirements.filter(
     (requirement) => requirement.remaining > 0,
   ).length;
+  const thesisRemainingCredits = requirementProgressById["master-thesis"]?.remaining ?? 0;
+  const nonThesisRemainingCredits = Math.max(optimization.missingCredits - thesisRemainingCredits, 0);
 
   return {
     programRules,
@@ -539,6 +550,8 @@ export const useModuleProgress = () => {
       countedCredits: optimization.countedCredits,
       totalCredits: programRules.totalCredits,
       remainingCredits: optimization.missingCredits,
+      thesisRemainingCredits,
+      nonThesisRemainingCredits,
       extraCredits: optimization.extraCredits,
       plannedCredits: optimization.plannedCredits,
       failedCredits: optimization.failedCredits,

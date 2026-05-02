@@ -1,4 +1,5 @@
 import { Module, Semester, UserModuleState } from "@/types";
+import { studentRecordExample } from "@/config/studentRecord.example";
 
 export const seedActualPlanSemesters: Semester[] = [
   { id: "winter-2024-25", label: "Winter 2024/25", order: 1 },
@@ -7,22 +8,49 @@ export const seedActualPlanSemesters: Semester[] = [
   { id: "summer-2026", label: "Summer 2026", order: 4 },
 ];
 
-export const seedModules: Module[] = [];
+const loadStudentRecord = () => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const localModule = require(/* turbopackOptional: true */ "@/config/studentRecord.local");
+    if (localModule?.studentRecordLocal) {
+      return localModule.studentRecordLocal;
+    }
+  } catch {
+    // Fallback to safe public example data when local private file is absent.
+  }
 
-export const seedUserModuleStates: UserModuleState[] = [];
+  return studentRecordExample;
+};
 
-export const legacySampleModuleIds = new Set([
-  "mod-hands-on-hci",
-  "mod-dmml",
-  "mod-sml",
-  "mod-ethics-nlp",
-  "mod-scalable-dms",
-  "mod-advanced-dms",
-  "mod-cv-1",
-  "mod-nlp-web",
-  "mod-dl-nlp",
-  "mod-intro-llm",
-  "mod-parallel-computing",
-  "mod-german-basic-course-1",
-  "mod-intro-entrepreneurship",
-]);
+const studentRecord = loadStudentRecord();
+const allStudentModules = [...studentRecord.passedModules, ...studentRecord.openModules];
+
+export const seedModules: Module[] = allStudentModules.map((record) => ({
+  id: record.id,
+  title: record.title,
+  moduleCode: record.moduleCode,
+  credits: record.credits ?? 0,
+  categoryGroupId: "",
+  categoryId: "",
+  subcategoryId: record.assignedBasketId,
+  assignedBasketId: record.assignedBasketId,
+  eligibleBasketIds: record.eligibleBasketIds ?? [record.assignedBasketId],
+  typeLabel: record.typeLabel ?? "lecture",
+  countingRule: "auto",
+  gradingType: record.gradingType,
+  assignmentStatus: "normal",
+  examKind: "unknown",
+  recognitionType: "tu-module",
+  recognitionApproved: false,
+  workloadNote: record.credits ? "" : "CP not provided in the Phase 1 input.",
+}));
+
+export const seedUserModuleStates: UserModuleState[] = allStudentModules.map((record) => ({
+  moduleId: record.id,
+  status: record.status,
+  semesterId: record.semesterId ?? "winter-2025-26",
+  grade: record.grade ?? null,
+  expectedGrade: null,
+}));
+
+export const legacySampleModuleIds = new Set<string>();
