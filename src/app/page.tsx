@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CatalogueGraph } from "@/components/graph/CatalogueGraph";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
+import { CatalogueExplorer } from "@/components/dashboard/CatalogueExplorer";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ModuleSidePanel } from "@/components/dashboard/ModuleSidePanel";
 import { OfficialStructurePanel } from "@/components/dashboard/OfficialStructurePanel";
@@ -35,8 +37,11 @@ export default function DashboardPage() {
   const { themePreference, setThemePreference } = useTheme();
 
   const [plannerMode, setPlannerMode] = useState<"official" | "actual">("actual");
+  const [officialCenterView, setOfficialCenterView] = useState<"guide" | "catalogue">("guide");
+  const [useGraphView, setUseGraphView] = useState(false);
   const [panelMode, setPanelMode] = useState<"details" | "add">("details");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [focusedRequirementId, setFocusedRequirementId] = useState<string | null>(null);
   const [currentSemesterId, setCurrentSemesterId] = useState("");
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
   const [dropTargetSemesterId, setDropTargetSemesterId] = useState<string | null>(null);
@@ -187,30 +192,93 @@ export default function DashboardPage() {
             <OfficialStructurePanel
               requirementById={officialProgress.requirementById}
               countRequirements={officialProgress.countRequirements}
+              onRequirementSelect={setFocusedRequirementId}
             />
 
-            <PlannerWorkspace
-              plannerMode={plannerMode}
-              currentSemesterId={effectiveCurrentSemesterId}
-              semesters={actualPlan.semesters}
-              semesterModules={filteredSemesterModules}
-              decisionsByModuleId={optimization.decisionsByModuleId}
-              draggedModuleId={draggedModuleId}
-              dropTargetSemesterId={dropTargetSemesterId}
-              selectedModuleId={effectiveSelectedModuleId}
-              recommendedPlan={recommendedPlan}
-              requirementById={officialProgress.requirementById}
-              onDragStart={setDraggedModuleId}
-              onDragEnd={() => {
-                setDraggedModuleId(null);
-                setDropTargetSemesterId(null);
-              }}
-              onCurrentSemesterChange={setCurrentSemesterId}
-              onDropTargetChange={setDropTargetSemesterId}
-              onDropModule={handleDropModule}
-              onDeleteSemester={handleDeleteSemester}
-              onSelectModule={openModuleDetails}
-            />
+            <div className="flex min-h-0 flex-col gap-3">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950">
+                {[
+                  { id: "guide", label: "Official Guide" },
+                  { id: "catalogue", label: "Catalogue Explorer" },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setOfficialCenterView(option.id as "guide" | "catalogue")}
+                    className={`rounded-xl px-3 py-2 text-sm transition ${
+                      officialCenterView === option.id
+                        ? "bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+
+                {officialCenterView === "catalogue" ? (
+                  <button
+                    type="button"
+                    onClick={() => setUseGraphView((current) => !current)}
+                    className={`rounded-xl px-3 py-2 text-sm transition ${
+                      useGraphView
+                        ? "bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    }`}
+                  >
+                    {useGraphView ? "Graph beta on" : "Graph beta off"}
+                  </button>
+                ) : (
+                  <span className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">
+                    Catalogue tools
+                  </span>
+                )}
+              </div>
+
+              <div className="min-h-0 flex-1">
+                {officialCenterView === "guide" ? (
+                  <PlannerWorkspace
+                    plannerMode={plannerMode}
+                    currentSemesterId={effectiveCurrentSemesterId}
+                    semesters={actualPlan.semesters}
+                    semesterModules={filteredSemesterModules}
+                    decisionsByModuleId={optimization.decisionsByModuleId}
+                    draggedModuleId={draggedModuleId}
+                    dropTargetSemesterId={dropTargetSemesterId}
+                    selectedModuleId={effectiveSelectedModuleId}
+                    recommendedPlan={recommendedPlan}
+                    requirementById={officialProgress.requirementById}
+                    onDragStart={setDraggedModuleId}
+                    onDragEnd={() => {
+                      setDraggedModuleId(null);
+                      setDropTargetSemesterId(null);
+                    }}
+                    onCurrentSemesterChange={setCurrentSemesterId}
+                    onDropTargetChange={setDropTargetSemesterId}
+                    onDropModule={handleDropModule}
+                    onDeleteSemester={handleDeleteSemester}
+                    onSelectModule={openModuleDetails}
+                  />
+                ) : (
+                  useGraphView ? (
+                    <CatalogueGraph
+                      categoryGroups={programRules.categoryGroups}
+                      categories={programRules.categories}
+                      subcategories={programRules.subcategories}
+                      modules={modules}
+                      states={states}
+                      semesters={actualPlan.semesters}
+                      requirementById={officialProgress.requirementById}
+                      focusedRequirementId={focusedRequirementId}
+                      onFocusedRequirementHandled={() => setFocusedRequirementId(null)}
+                      onUpdateStatus={updateStatus}
+                      onUpdateSemester={updateSemester}
+                    />
+                  ) : (
+                    <CatalogueExplorer />
+                  )
+                )}
+              </div>
+            </div>
 
             <ModuleSidePanel
               selectedModule={selectedModule}

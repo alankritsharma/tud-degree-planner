@@ -43,6 +43,7 @@ export type ModuleHandbookEntry = {
   learningObjectives: string;
   prerequisites: string;
   examForm: string;
+  creditRequirement: string;
   grading: string;
   usability: string[];
   references: string[];
@@ -68,6 +69,7 @@ type RawModuleHandbookEntry = {
   learningObjectives?: string;
   prerequisites?: string;
   examForm?: string;
+  creditRequirement?: string;
   grading?: string;
   usability?: string[];
   references?: string[];
@@ -305,6 +307,7 @@ export const moduleHandbookCatalog: ModuleHandbookEntry[] = [...groupedEntries.e
       learningObjectives: canonical.learningObjectives ?? "",
       prerequisites: canonical.prerequisites ?? "",
       examForm: canonical.examForm ?? "",
+      creditRequirement: canonical.creditRequirement ?? "",
       grading: canonical.grading ?? "",
       usability: canonical.usability ?? [],
       references: canonical.references ?? [],

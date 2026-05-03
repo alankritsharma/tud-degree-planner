@@ -5,6 +5,7 @@ type OfficialStructurePanelProps = {
   requirementById: Record<string, RequirementProgress>;
   countRequirements: RequirementProgress[];
   compact?: boolean;
+  onRequirementSelect?: (requirementId: string) => void;
 };
 
 type RequirementTreeNode = {
@@ -77,14 +78,20 @@ const formatRange = (requirement: RequirementProgress) => {
 const ProgressRow = ({
   requirement,
   depth,
+  onSelect,
 }: {
   requirement: RequirementProgress;
   depth: number;
+  onSelect?: (requirementId: string) => void;
 }) => {
   const progress = requirement.max === 0 ? 0 : Math.min((requirement.counted / requirement.max) * 100, 100);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+    <button
+      type="button"
+      onClick={() => onSelect?.(requirement.id)}
+      className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0" style={{ paddingLeft: `${depth * 0.45}rem` }}>
           <p className="break-words text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -131,7 +138,7 @@ const ProgressRow = ({
       <div className="mt-3 h-2 rounded-full bg-slate-200 dark:bg-slate-800">
         <div className="h-2 rounded-full bg-slate-800 dark:bg-slate-300" style={{ width: `${progress}%` }} />
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -139,10 +146,12 @@ const TreeRows = ({
   node,
   requirementById,
   depth = 0,
+  onSelect,
 }: {
   node: RequirementTreeNode;
   requirementById: Record<string, RequirementProgress>;
   depth?: number;
+  onSelect?: (requirementId: string) => void;
 }) => {
   const requirement = requirementById[node.id];
 
@@ -152,9 +161,9 @@ const TreeRows = ({
 
   return (
     <>
-      <ProgressRow requirement={requirement} depth={depth} />
+      <ProgressRow requirement={requirement} depth={depth} onSelect={onSelect} />
       {node.children?.map((child) => (
-        <TreeRows key={child.id} node={child} requirementById={requirementById} depth={depth + 1} />
+        <TreeRows key={child.id} node={child} requirementById={requirementById} depth={depth + 1} onSelect={onSelect} />
       ))}
     </>
   );
@@ -163,6 +172,7 @@ const TreeRows = ({
 export const OfficialStructurePanel = ({
   requirementById,
   compact = false,
+  onRequirementSelect,
 }: OfficialStructurePanelProps) => {
   const [isExpanded, setIsExpanded] = useState(!compact);
 
@@ -190,10 +200,10 @@ export const OfficialStructurePanel = ({
         {compact && !isExpanded ? (
           ["total-degree", "elective-specialization", "studium-generale", "master-thesis"].map((id) => {
             const requirement = requirementById[id];
-            return requirement ? <ProgressRow key={id} requirement={requirement} depth={0} /> : null;
+            return requirement ? <ProgressRow key={id} requirement={requirement} depth={0} onSelect={onRequirementSelect} /> : null;
           })
         ) : (
-          <TreeRows node={requirementTree} requirementById={requirementById} />
+          <TreeRows node={requirementTree} requirementById={requirementById} onSelect={onRequirementSelect} />
         )}
       </div>
     </aside>

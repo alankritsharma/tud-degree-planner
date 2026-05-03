@@ -7,6 +7,7 @@ import {
   seedModules,
   seedUserModuleStates,
 } from "@/config/seedData";
+import { LegacyModule, normalizeStoredModule } from "@/lib/modulePersistence";
 import { getRequirementProgress, getStrictOptimization } from "@/lib/progress";
 import {
   AssignmentStatus,
@@ -26,7 +27,7 @@ const MODULES_STORAGE_KEY = "mastermap:modules";
 const STATES_STORAGE_KEY = "mastermap:user-module-states";
 const SEMESTERS_STORAGE_KEY = "mastermap:actual-plan-semesters";
 const DATA_VERSION_KEY = "mastermap:data-version";
-const DATA_VERSION = "2026-05-02-phase-1-tucan-record-v1";
+const DATA_VERSION = "2026-05-03-module-code-persistence-v2";
 
 const normalizeSemesterId = (semesterId: string): string => {
   if (semesterId.startsWith("semester-")) {
@@ -64,40 +65,6 @@ const parseStoredArray = <T,>(key: string): T[] => {
   } catch {
     return [];
   }
-};
-
-type LegacyModule = Partial<Module> & {
-  id: string;
-  title: string;
-  credits: number;
-  requirementId?: string;
-};
-
-const normalizeModule = (module: LegacyModule): Module => {
-  const assignedBasketId =
-    module.assignedBasketId ?? module.requirementId ?? module.subcategoryId ?? "basic-software-hardware";
-
-  return {
-    id: module.id,
-    title: module.title,
-    credits: Number(module.credits) || 0,
-    categoryGroupId: module.categoryGroupId ?? "",
-    categoryId: module.categoryId ?? "",
-    subcategoryId: module.subcategoryId ?? assignedBasketId,
-    assignedBasketId,
-    eligibleBasketIds:
-      module.eligibleBasketIds && module.eligibleBasketIds.length > 0
-        ? module.eligibleBasketIds
-        : [assignedBasketId],
-    typeLabel: module.typeLabel ?? "lecture",
-    countingRule: module.countingRule ?? "auto",
-    gradingType: module.gradingType ?? "graded",
-    assignmentStatus: module.assignmentStatus ?? "normal",
-    examKind: module.examKind ?? "unknown",
-    recognitionType: module.recognitionType ?? "tu-module",
-    recognitionApproved: module.recognitionApproved ?? false,
-    workloadNote: module.workloadNote ?? "",
-  };
 };
 
 const normalizeState = (state: UserModuleState): UserModuleState => ({
@@ -172,7 +139,9 @@ export const useModuleProgress = () => {
 
   useEffect(() => {
     const storedVersion = window.localStorage.getItem(DATA_VERSION_KEY);
-    const storedModules = parseStoredArray<LegacyModule>(MODULES_STORAGE_KEY).map(normalizeModule);
+    const storedModules = parseStoredArray<LegacyModule>(MODULES_STORAGE_KEY).map((module) =>
+      normalizeStoredModule(module, seedModules),
+    );
     const storedStates = parseStoredArray<UserModuleState>(STATES_STORAGE_KEY).map(normalizeState);
     const storedSemesters = parseStoredArray<Semester>(SEMESTERS_STORAGE_KEY);
 
@@ -394,7 +363,7 @@ export const useModuleProgress = () => {
     const nextModule: Module = {
       id: moduleId,
       title,
-      moduleCode: "",
+      moduleCode: undefined,
       credits,
       ...placement,
       assignedBasketId,
