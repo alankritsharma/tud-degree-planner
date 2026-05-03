@@ -16,6 +16,51 @@ OUT_MANUAL_REVIEW = OUT_DIR / "module-handbook-manual-review.json"
 
 SOURCE_PDF_NAME = "2023_05_11_MHB_MSC_CS.pdf"
 
+MODULE_NAME_CORRECTIONS = {
+    "20-00-1017": "Scalable Data Management Systems",
+    "20-00-1075": "Distributed Geometry Processing",
+    "20-00-0677": "Computer-aided Planning and Navigation in Medicine",
+}
+
+SECTION_NAME_CORRECTIONS = {
+    "Software&Hardware": "Software & Hardware",
+    "DataScienceApplications": "Data Science Applications",
+    "DataSystemsEngineering": "Data Systems Engineering",
+    "FoundationsOfDataScience": "Foundations of Data Science",
+    "FoundationsofDataScience": "Foundations of Data Science",
+}
+
+READABILITY_REPLACEMENTS = [
+    (r"\b1Term\b", "1 Term"),
+    (r"\bEvery2\.\s*Semester\b", "Every 2. Semester"),
+    (r"\bThiscourse\b", "This course"),
+    (r"\bThefocus\b", "The focus"),
+    (r"\bTopicsinclude\b", "Topics include"),
+    (r"\bAfterthecourse\b", "After the course"),
+    (r"\bAfterthe\b", "After the"),
+    (r"\bThestudent\b", "The student"),
+    (r"\bThestudents\b", "The students"),
+    (r"\bThemaingoal\b", "The main goal"),
+    (r"\bProgrammingin\b", "Programming in"),
+    (r"\bPassexam\b", "Pass exam"),
+    (r"\bCourserelatedexam\b", "Course related exam"),
+    (r"\bMaybeused\b", "May be used"),
+    (r"\bofthemodule\b", "of the module"),
+    (r"\bPrerequisiteforparticipation\b", "Prerequisite for participation"),
+    (r"\bFormofexamination\b", "Form of examination"),
+    (r"\bscalabledatamanagement\b", "scalable data management"),
+    (r"\bDatabaseArchitectures\b", "Database Architectures"),
+    (r"\bParallelandDistributedDatabases\b", "Parallel and Distributed Databases"),
+    (r"\bDataWarehousing\b", "Data Warehousing"),
+    (r"\bNoSQLDatabases\b", "NoSQL Databases"),
+    (r"\bStreamProcessing\b", "Stream Processing"),
+    (r"\bGraphDatabases\b", "Graph Databases"),
+    (r"\bScalableMachineLearning\b", "Scalable Machine Learning"),
+    (r"\bandthe\b", "and the"),
+    (r"\binthe\b", "in the"),
+    (r"\bforthe\b", "for the"),
+]
+
 SECTION_HEADINGS = [
     "Software & Hardware",
     "Theory",
@@ -33,6 +78,13 @@ def clean_text(value: str | None) -> str:
         return ""
     value = value.replace("\xa0", " ")
     value = re.sub(r"[ \t]+", " ", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    return value.strip()
+
+
+def clean_block_text(value: str) -> str:
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = re.sub(r"\n?<<<PAGE:\d+>>>\n?", "\n", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     return value.strip()
 
@@ -61,6 +113,54 @@ def extract_field(block: str, label_patterns: list[str], next_labels: list[str])
     if not m:
         return ""
     return clean_text(m.group(1))
+
+
+def normalize_section_name(section: str | None) -> str | None:
+    if not section:
+        return None
+    normalized = section
+    for raw, cleaned in SECTION_NAME_CORRECTIONS.items():
+        normalized = normalized.replace(raw, cleaned)
+    return clean_text(normalized)
+
+
+def normalize_module_name(module_code: str | None, module_name: str | None) -> str | None:
+    if not module_name:
+        return None
+    if module_code and module_code in MODULE_NAME_CORRECTIONS:
+        return MODULE_NAME_CORRECTIONS[module_code]
+
+    normalized = module_name
+    normalized = re.sub(
+        r"(?<=[A-Za-z])(of|for|and|in|to|with|the)(?=[A-Z])",
+        r" \1 ",
+        normalized,
+    )
+    normalized = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", normalized)
+    normalized = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", normalized)
+    normalized = re.sub(r"(?<=[A-Za-z])(?=[IVX]+$)", " ", normalized)
+    normalized = re.sub(r"(?<=-)(?=[A-Z])", "", normalized)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    return clean_text(normalized)
+
+
+def normalize_person_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value
+    normalized = re.sub(r"(?<=[a-zäöüß])(?=[A-ZÄÖÜ])", " ", normalized)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    return clean_text(normalized)
+
+
+def normalize_readability(value: str) -> str:
+    if not value:
+        return ""
+    normalized = value
+    for pattern, replacement in READABILITY_REPLACEMENTS:
+        normalized = re.sub(pattern, replacement, normalized)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    return clean_text(normalized)
 
 
 def section_markers(full_text: str) -> list[tuple[int, str]]:
@@ -142,6 +242,90 @@ def recover_module_code(full_text: str, module_name: str) -> str | None:
     return None
 
 
+def extract_numbered_sections(block: str) -> dict[str, str]:
+    labels = [
+        ("teachingContent", r"2\s+Teachingcontent"),
+        ("learningObjectives", r"3\s+Learningobjectives"),
+        ("prerequisites", r"4\s+Prerequisiteforparticipation"),
+        ("examForm", r"5\s+Formofexamination"),
+        (
+            "creditRequirement",
+            r"6\s+Prerequisitefortheawardofcreditpoints",
+        ),
+        ("grading", r"7\s+Grading"),
+        ("usability", r"8\s+Usabilityofthemodule"),
+        ("references", r"9\s+References"),
+        ("comment", r"10\s+Comment"),
+    ]
+    text = clean_block_text(block)
+    matches = []
+    for key, pattern in labels:
+        match = re.search(rf"(?:^|\n)({pattern})\s*\n?", text)
+        if match:
+            matches.append((match.start(1), match.end(1), key))
+    matches.sort(key=lambda item: item[0])
+
+    sections: dict[str, str] = {}
+    for index, (start, end, key) in enumerate(matches):
+        next_start = matches[index + 1][0] if index + 1 < len(matches) else len(text)
+        body = clean_text(text[end:next_start])
+        sections[key] = body
+    return sections
+
+
+def split_lines(value: str) -> list[str]:
+    if not value:
+        return []
+    cleaned_lines = []
+    for line in value.splitlines():
+        normalized = normalize_readability(clean_text(line))
+        if not normalized or re.fullmatch(r"\d+", normalized):
+            continue
+        cleaned_lines.append(normalized)
+    return cleaned_lines
+
+
+def clean_multiline_field(value: str) -> str:
+    if not value:
+        return ""
+    return "\n".join(split_lines(value))
+
+
+def detect_numbered_heading_leak(value: str) -> bool:
+    if not value:
+        return False
+    return bool(
+        re.search(
+            r"(?:^|\n)(?:4\s+Prerequisiteforparticipation|5\s+Formofexamination|6\s+Prerequisitefortheawardofcreditpoints|7\s+Grading|8\s+Usabilityofthemodule|9\s+References|10\s+Comment)",
+            value,
+        )
+    )
+
+
+def merged_text_likely(value: str) -> bool:
+    if not value:
+        return False
+    suspicious_phrases = [
+        "Thiscourse",
+        "Afterthe",
+        "ofthe",
+        "andthe",
+        "inthe",
+        "forthe",
+        "Programmingin",
+        "Maybeused",
+        "Courserelatedexam",
+        "Passexam",
+    ]
+    if any(phrase in value for phrase in suspicious_phrases):
+        return True
+    if re.search(r"\b[A-Za-z]{20,}\b", value):
+        return True
+    if re.search(r"\b[a-z]+[A-Z][A-Za-z]+\b", value):
+        return True
+    return False
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if not PDF_PATH.exists():
@@ -175,8 +359,9 @@ def main() -> None:
                 section = heading
             else:
                 break
+        section = normalize_section_name(section)
 
-        module_name = parse_module_name(block)
+        raw_module_name = parse_module_name(block)
 
         module_data_line = line_after(block, r"(Module\s*nr\.|Module\s*no\.|Modulenr\.)")
         code_match = re.search(r"\b\d{2}-\d{2}-[A-Za-z0-9]{3,}\b", module_data_line)
@@ -199,69 +384,114 @@ def main() -> None:
         if lang_owner_line:
             owner_start = re.search(r"\b(Prof\.?|Jun\.?-?Prof\.?)", lang_owner_line)
             if owner_start:
-                language = clean_text(lang_owner_line[: owner_start.start()])
-                module_owner = clean_text(lang_owner_line[owner_start.start() :])
+                language = normalize_readability(clean_text(lang_owner_line[: owner_start.start()]))
+                module_owner = normalize_person_name(clean_text(lang_owner_line[owner_start.start() :]))
             else:
-                language = clean_text(lang_owner_line)
+                language = normalize_readability(clean_text(lang_owner_line))
 
-        learning_objectives = extract_field(
-            block,
-            ["Learning\\s*objectives", "Learning\\s*outcomes"],
-            [
-                r"\n4\s+Prerequisiteforparticipation",
-                "Prerequisite\\s*for\\s*participation",
-                r"\n5\s+Formofexamination",
-                "Form\\s*of\\s*examination",
-            ],
-        )
-        prerequisites = extract_field(
-            block,
-            ["Prerequisite\\s*for\\s*participation"],
-            [r"\n5\s+Formofexamination", "Form\\s*of\\s*examination"],
-        )
-        exam_form = extract_field(
-            block,
-            ["Form\\s*of\\s*examination"],
-            [
-                r"\n6\s+Prerequisitefortheawardofcreditpoints",
-                "Prerequisite\\s*for\\s*the\\s*award\\s*of\\s*credit\\s*points",
-            ],
-        )
-        credit_requirement = extract_field(
-            block,
-            ["Prerequisite\\s*for\\s*the\\s*award\\s*of\\s*credit\\s*points"],
-            [r"\n7\s+Grading", "Grading"],
-        )
-        grading = extract_field(
-            block,
-            ["Grading"],
-            [r"\n8\s+Usabilityofthemodule", "Usability\\s*of\\s*the\\s*module"],
+        numbered_sections = extract_numbered_sections(block)
+        learning_objectives = clean_multiline_field(numbered_sections.get("learningObjectives", ""))
+        prerequisites = clean_multiline_field(numbered_sections.get("prerequisites", ""))
+        exam_form = clean_multiline_field(numbered_sections.get("examForm", ""))
+        credit_requirement = clean_multiline_field(numbered_sections.get("creditRequirement", ""))
+        grading = clean_multiline_field(numbered_sections.get("grading", ""))
+        teaching_content = split_lines(numbered_sections.get("teachingContent", ""))
+        usability = split_lines(numbered_sections.get("usability", ""))
+        references = split_lines(numbered_sections.get("references", ""))
+        comment = clean_multiline_field(numbered_sections.get("comment", ""))
+
+        learning_objectives = normalize_readability(learning_objectives)
+        prerequisites = normalize_readability(prerequisites)
+        exam_form = normalize_readability(exam_form)
+        credit_requirement = normalize_readability(credit_requirement)
+        grading = normalize_readability(grading)
+        comment = normalize_readability(comment)
+
+        normalized_module_name = normalize_module_name(module_code, raw_module_name)
+        warnings: list[str] = []
+        changed_by_cleanup = normalized_module_name != raw_module_name
+        if normalized_module_name and " " not in normalized_module_name and len(normalized_module_name) > 20:
+            warnings.append("merged-looking-module-name")
+        if "Prerequisiteforparticipation" in learning_objectives:
+            warnings.append("learning-objectives-contains-prerequisite-heading")
+        if "Formofexamination" in learning_objectives:
+            warnings.append("learning-objectives-contains-exam-heading")
+        leaked_fields = []
+        for field_name, field_value in [
+            ("learningObjectives", learning_objectives),
+            ("teachingContent", "\n".join(teaching_content)),
+            ("prerequisites", prerequisites),
+            ("examForm", exam_form),
+            ("grading", grading),
+            ("usability", "\n".join(usability)),
+            ("references", "\n".join(references)),
+            ("comment", comment),
+        ]:
+            if detect_numbered_heading_leak(field_value):
+                leaked_fields.append(field_name)
+        if leaked_fields:
+            warnings.append(f"numbered-heading-leak:{','.join(leaked_fields)}")
+
+        merged_problem_fields = []
+        for field_name, field_value in [
+            ("moduleDuration", clean_text(duration_match.group(1)) if duration_match else ""),
+            ("moduleCycle", clean_text(cycle_match.group(1)).replace("Every2.", "Every 2.") if cycle_match else ""),
+            ("moduleOwner", module_owner or ""),
+            ("learningObjectives", learning_objectives),
+            ("prerequisites", prerequisites),
+            ("examForm", exam_form),
+            ("creditRequirement", credit_requirement),
+            ("grading", grading),
+            ("comment", comment),
+            ("teachingContent", "\n".join(teaching_content)),
+            ("usability", "\n".join(usability)),
+            ("references", "\n".join(references)),
+        ]:
+            if merged_text_likely(field_value):
+                merged_problem_fields.append(field_name)
+        if merged_problem_fields:
+            warnings.append(f"merged-text-likely:{','.join(merged_problem_fields)}")
+
+        extraction_quality = "clean"
+        if any(w.startswith("merged-text-likely:") or w.startswith("numbered-heading-leak:") for w in warnings):
+            extraction_quality = "needs-review"
+        elif warnings:
+            extraction_quality = "partially-cleaned"
+        elif changed_by_cleanup:
+            extraction_quality = "partially-cleaned"
+
+        module_duration = normalize_readability(clean_text(duration_match.group(1)) if duration_match else "")
+        module_cycle = normalize_readability(
+            clean_text(cycle_match.group(1)).replace("Every2.", "Every 2.") if cycle_match else ""
         )
 
         module = {
             "moduleCode": module_code,
-            "moduleName": module_name or None,
+            "moduleName": normalized_module_name or None,
             "section": section,
             "creditPoints": credit_points,
             "workloadHours": workload_hours,
             "selfStudyHours": self_study_hours,
-            "moduleDuration": clean_text(duration_match.group(1)) if duration_match else None,
-            "moduleCycle": clean_text(cycle_match.group(1)).replace("Every2.", "Every 2.") if cycle_match else None,
+            "moduleDuration": module_duration or None,
+            "moduleCycle": module_cycle or None,
             "language": language,
             "moduleOwner": module_owner,
             "courses": [],
-            "teachingContent": [],
+            "teachingContent": teaching_content,
             "learningObjectives": learning_objectives,
             "prerequisites": prerequisites,
             "examForm": exam_form,
             "creditRequirement": credit_requirement,
             "grading": grading,
-            "usability": [],
-            "references": [],
-            "comment": extract_field(block, ["Comment"], []),
+            "usability": usability,
+            "references": references,
+            "comment": comment,
             "sourcePages": page_nums,
             "metadataStatus": "pdfplumber-extracted",
-            "extractionWarnings": [],
+            "extractionWarnings": warnings,
+            "extractionQuality": extraction_quality,
+            "originalExtractedModuleName": raw_module_name or None,
+            "rawBlockText": clean_block_text(block),
             "sourcePdf": SOURCE_PDF_NAME,
         }
 
@@ -271,15 +501,21 @@ def main() -> None:
     for module in modules:
         if module.get("moduleCode"):
             continue
-        recovered_code = recover_module_code(full_text, module.get("moduleName") or "")
+        recovered_code = recover_module_code(
+            full_text,
+            module.get("originalExtractedModuleName") or module.get("moduleName") or "",
+        )
         if recovered_code:
             module["moduleCode"] = recovered_code
             module["extractionWarnings"].append("module-code-recovered-from-global-search")
+            if module["extractionQuality"] == "clean":
+                module["extractionQuality"] = "partially-cleaned"
             continue
 
         module["moduleCode"] = None
         module["metadataStatus"] = "needs-manual-review"
         module["extractionWarnings"].append("missing-module-code")
+        module["extractionQuality"] = "needs-review"
         manual_review_modules.append(
             {
                 "moduleName": module.get("moduleName"),
@@ -294,6 +530,30 @@ def main() -> None:
 
     codes = [m["moduleCode"] for m in modules if m.get("moduleCode")]
     dup_codes = sorted([k for k, v in Counter(codes).items() if v > 1])
+    problematic_fields = []
+    for module in modules:
+        for field_name, field_value in [
+            ("moduleName", module.get("moduleName") or ""),
+            ("moduleOwner", module.get("moduleOwner") or ""),
+            ("moduleDuration", module.get("moduleDuration") or ""),
+            ("moduleCycle", module.get("moduleCycle") or ""),
+            ("learningObjectives", module.get("learningObjectives") or ""),
+            ("prerequisites", module.get("prerequisites") or ""),
+            ("examForm", module.get("examForm") or ""),
+            ("creditRequirement", module.get("creditRequirement") or ""),
+            ("grading", module.get("grading") or ""),
+            ("teachingContent", "\n".join(module.get("teachingContent") or [])),
+            ("usability", "\n".join(module.get("usability") or [])),
+            ("references", "\n".join(module.get("references") or [])),
+        ]:
+            if merged_text_likely(field_value):
+                problematic_fields.append(
+                    {
+                        "moduleCode": module.get("moduleCode"),
+                        "field": field_name,
+                        "preview": field_value[:160],
+                    }
+                )
     summary = {
         "totalPages": len(pages),
         "totalModulesExtracted": len(modules),
@@ -310,7 +570,29 @@ def main() -> None:
         ),
         "modulesMissingSectionCount": sum(1 for m in modules if not m.get("section")),
         "modulesWithSectionCount": sum(1 for m in modules if m.get("section")),
+        "modulesWithMergedLookingNames": sum(
+            1 for m in modules if "merged-looking-module-name" in m.get("extractionWarnings", [])
+        ),
+        "fieldsWithMergedTextLikely": len(problematic_fields),
+        "modulesWithMergedTextLikely": len(
+            {
+                module.get("moduleCode") or module.get("originalExtractedModuleName")
+                for module in modules
+                if any(w.startswith("merged-text-likely:") for w in module.get("extractionWarnings", []))
+            }
+        ),
+        "modulesWithLearningObjectiveHeadingLeaks": sum(
+            1
+            for m in modules
+            if (
+                "learning-objectives-contains-prerequisite-heading" in m.get("extractionWarnings", [])
+                or "learning-objectives-contains-exam-heading" in m.get("extractionWarnings", [])
+            )
+        ),
+        "modulesMarkedNeedsReview": sum(1 for m in modules if m.get("extractionQuality") == "needs-review"),
+        "needsReviewCount": sum(1 for m in modules if m.get("extractionQuality") == "needs-review"),
         "duplicateModuleCodes": dup_codes,
+        "sampleProblematicFields": problematic_fields[:10],
         "firstTenModulesPreview": modules[:10],
         "manualReviewModules": len(manual_review_modules),
         "extractionWarnings": [
